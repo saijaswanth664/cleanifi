@@ -1,0 +1,65 @@
+.main {
+  max-width: 1200px;
+  margin: auto;
+  padding: 30px;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.card {
+  padding: 24px;
+}
+
+.grid {
+  display: grid;
+  gap: 24px;
+}
+
+@media (min-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr 2fr;
+  }
+}
+
+/* Buttons */
+.btn {
+  margin-top: 14px;
+  padding: 12px 22px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(0,0,0,.25);
+  transition: all .25s ease;
+}
+
+.btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 18px 40px rgba(0,0,0,.35);
+}
+
+.btn:active {
+  transform: scale(0.96);
+}
+
+/* Inputs */
+.input {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255,255,255,.12);
+  color: white;
+}
+
+/* States */
+.state {
+  padding: 30px;
+  text-align: center;
+  color: var(--text-muted);
+}
