@@ -1,14 +1,13 @@
 import streamlit as st
 import pandas as pd
-from io import BytesIO
-import time
+import numpy as np
 
-# 🔗 IMPORT BACKEND (NO LOGIC CHANGED)
-from app import snake_case, detect_type, quality_score
+# 🔗 BACKEND HELPERS (READ ONLY)
+from app import detect_type, quality_score, snake_case
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
-    page_title="CLEANIFI",
+    page_title="CLEANIFI – AI Cleaning Advisor",
     page_icon="🧹",
     layout="wide"
 )
@@ -19,17 +18,17 @@ st.markdown("""
 html, body {
     background: radial-gradient(circle at top, #1e293b, #020617);
     color: #e5e7eb;
-    font-family: 'Inter', sans-serif;
+    font-family: Inter, sans-serif;
 }
 
 .glass {
     background: rgba(255,255,255,0.08);
     backdrop-filter: blur(18px);
-    border-radius: 20px;
+    border-radius: 22px;
     padding: 24px;
     border: 1px solid rgba(255,255,255,0.15);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-    margin-bottom: 22px;
+    box-shadow: 0 12px 35px rgba(0,0,0,0.45);
+    margin-bottom: 24px;
 }
 
 .title {
@@ -45,33 +44,26 @@ html, body {
     font-size: 15px;
 }
 
-.progress-step {
-    display: flex;
-    gap: 10px;
-    margin-top: 12px;
-}
-
-.step {
-    flex: 1;
-    height: 6px;
-    border-radius: 10px;
-    background: rgba(255,255,255,0.15);
-}
-
-.step.active {
-    background: linear-gradient(90deg,#38bdf8,#a855f7);
-}
-
-.stButton>button {
-    border-radius: 14px;
+.tag {
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 12px;
     font-weight: 600;
-    padding: 0.6rem 1.6rem;
-    transition: all 0.2s ease;
 }
 
-.stButton>button:hover {
-    transform: scale(1.05);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+.high {
+    background: rgba(239,68,68,0.2);
+    color: #fecaca;
+}
+
+.medium {
+    background: rgba(245,158,11,0.2);
+    color: #fde68a;
+}
+
+.low {
+    background: rgba(34,197,94,0.2);
+    color: #bbf7d0;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -79,115 +71,108 @@ html, body {
 # ---------------- HEADER ----------------
 st.markdown("""
 <div class="glass">
-    <div style="display:flex;align-items:center;gap:18px">
-        <img src="assets/cleanifi_logo.png" width="80">
-        <div>
-            <div class="title">CLEANIFI</div>
-            <div class="subtitle">Premium Intelligent Data Cleaning Platform</div>
-        </div>
+  <div style="display:flex;align-items:center;gap:18px">
+    <img src="assets/cleanifi_logo.png" width="85">
+    <div>
+      <div class="title">CLEANIFI</div>
+      <div class="subtitle">AI-Style Data Cleaning Recommendations</div>
     </div>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
 # ---------------- UPLOAD ----------------
 st.markdown("<div class='glass'>", unsafe_allow_html=True)
-uploaded = st.file_uploader("📤 Upload CSV or Excel File", type=["csv","xlsx"])
+file = st.file_uploader("📤 Upload CSV or Excel Dataset", type=["csv", "xlsx"])
 st.markdown("</div>", unsafe_allow_html=True)
 
-if uploaded:
-    # ---------------- STEP 1 ----------------
-    st.markdown("<div class='glass'>", unsafe_allow_html=True)
-    st.subheader("Step 1 · Data Preview")
-
-    if uploaded.name.endswith(".csv"):
-        df = pd.read_csv(uploaded)
+if file:
+    # ---------------- LOAD DATA ----------------
+    if file.name.endswith(".csv"):
+        df = pd.read_csv(file)
     else:
-        df = pd.read_excel(uploaded)
+        df = pd.read_excel(file)
 
-    st.dataframe(df, use_container_width=True)
+    rows, cols = df.shape
+    score = quality_score(df)
 
-    st.markdown("""
-    <div class="progress-step">
-        <div class="step active"></div>
-        <div class="step"></div>
-        <div class="step"></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # ---------------- OPTIONS ----------------
+    # ---------------- EXEC SUMMARY ----------------
     st.markdown("<div class='glass'>", unsafe_allow_html=True)
-    st.subheader("Step 2 · Cleaning Configuration")
+    st.subheader("🧠 AI Quality Summary")
 
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        rename_cols = st.checkbox("Snake Case Columns", True)
-    with c2:
-        drop_dupes = st.checkbox("Remove Duplicates", True)
-    with c3:
-        fill_missing = st.checkbox("Fill Missing Values", True)
+    if score >= 90:
+        verdict = "🟢 Dataset quality is excellent. Minimal cleaning required."
+    elif score >= 70:
+        verdict = "🟡 Dataset quality is moderate. Cleaning recommended."
+    else:
+        verdict = "🔴 Dataset quality is poor. Significant cleaning required."
 
-    st.markdown("""
-    <div class="progress-step">
-        <div class="step active"></div>
-        <div class="step active"></div>
-        <div class="step"></div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"""
+    **Overall Quality Score:** {score}%  
+    **AI Verdict:** {verdict}
+    """)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # ---------------- CLEAN ----------------
-    if st.button("🚀 Run Cleaning Pipeline"):
-        with st.spinner("Applying intelligent cleaning..."):
-            time.sleep(1.2)
+    # ---------------- AI RECOMMENDATIONS ----------------
+    st.markdown("<div class='glass'>", unsafe_allow_html=True)
+    st.subheader("🤖 AI-Generated Cleaning Recommendations")
 
-        clean_df = df.copy()
+    for col in df.columns:
+        col_data = df[col]
+        col_type = detect_type(col_data)
+        missing = col_data.isnull().sum()
+        missing_pct = (missing / rows) * 100
+        unique = col_data.nunique(dropna=True)
 
-        if rename_cols:
-            clean_df.columns = [snake_case(c) for c in clean_df.columns]
+        recommendations = []
 
-        if drop_dupes:
-            clean_df = clean_df.drop_duplicates()
+        # Missing values
+        if missing_pct > 30:
+            recommendations.append((
+                "High",
+                f"Column **{col}** has {round(missing_pct,2)}% missing values. Consider removal or advanced imputation."
+            ))
+        elif missing_pct > 5:
+            recommendations.append((
+                "Medium",
+                f"Column **{col}** has moderate missing values. Imputation recommended."
+            ))
 
-        if fill_missing:
-            for col in clean_df.columns:
-                dtype = detect_type(clean_df[col])
-                if dtype == "numeric":
-                    clean_df[col] = clean_df[col].fillna(clean_df[col].mean())
-                else:
-                    clean_df[col] = clean_df[col].fillna("Unknown")
+        # Duplicates / low variance
+        if unique <= 1:
+            recommendations.append((
+                "High",
+                f"Column **{col}** has no variance and provides no analytical value."
+            ))
+        elif unique < rows * 0.05:
+            recommendations.append((
+                "Medium",
+                f"Column **{col}** has low uniqueness. Review for redundancy."
+            ))
 
-        score = quality_score(df, clean_df)
+        # Data type issues
+        if col_type == "text" and col_data.str.len().mean() > 50:
+            recommendations.append((
+                "Low",
+                f"Column **{col}** contains long text. NLP preprocessing may be needed."
+            ))
 
-        # ---------------- RESULT ----------------
-        st.markdown("<div class='glass'>", unsafe_allow_html=True)
-        st.subheader("Step 3 · Cleaned Output")
+        if recommendations:
+            st.markdown(f"### 🔹 {col}")
+            for level, text in recommendations:
+                css = "high" if level == "High" else "medium" if level == "Medium" else "low"
+                st.markdown(
+                    f"<span class='tag {css}'>{level} Priority</span> &nbsp; {text}",
+                    unsafe_allow_html=True
+                )
 
-        st.dataframe(clean_df, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("### 📊 Data Quality Score")
-        st.progress(score / 100)
-        st.markdown(f"**{score}% Quality Improvement Achieved**")
-
-        buffer = BytesIO()
-        clean_df.to_csv(buffer, index=False)
-        buffer.seek(0)
-
-        st.download_button(
-            "⬇ Download Cleaned Data",
-            buffer,
-            file_name="cleaned_data.csv",
-            mime="text/csv"
-        )
-
-        st.markdown("""
-        <div class="progress-step">
-            <div class="step active"></div>
-            <div class="step active"></div>
-            <div class="step active"></div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown("</div>", unsafe_allow_html=True)
+    # ---------------- DISCLAIMER ----------------
+    st.markdown("<div class='glass'>", unsafe_allow_html=True)
+    st.caption("""
+    ⚠️ These recommendations are AI-style, explainable suggestions generated from data patterns.
+    No backend logic or automatic cleaning has been applied.
+    """)
+    st.markdown("</div>", unsafe_allow_html=True)
