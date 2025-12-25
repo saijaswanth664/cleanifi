@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="glass main fade-in">
+
+    <header class="header">
+        <h1>CLEANIFI</h1>
+        <p>Smart Data Cleaning Interface</p>
+    </header>
+
+    <section class="grid">
+        <!-- Upload Panel -->
+        <div class="glass card">
+            <h3>Upload Dataset</h3>
+            <input class="input" type="file">
+            <button class="btn">Process Data</button>
+        </div>
+
+        <!-- Result Panel -->
+        <div class="glass card">
+            <h3>Preview</h3>
+
+            <!-- Skeleton Loader -->
+            <div class="skeleton"></div>
+            <div class="skeleton w-70"></div>
+
+            <!-- Empty State -->
+            <!--
+            <div class="state">
+                No data yet. Upload a file to preview.
+            </div>
+            -->
+        </div>
+    </section>
+
+</div>
+{% endblock %}
