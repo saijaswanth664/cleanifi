@@ -34,7 +34,7 @@ h1 {{
 """, unsafe_allow_html=True)
 
 # ---------------- HEADER ----------------
-st.image("cleanify_logo.png", width=80)
+st.image("assets/cleanify_logo.png", width=80)
 st.markdown("<h1>CLEANIFI</h1>", unsafe_allow_html=True)
 st.caption("AI-Assisted • Human-in-the-Loop Data Cleaning")
 
@@ -187,3 +187,4 @@ if file:
         buffer.getvalue(),
         "cleanifi_cleaned.xlsx"
     )
+
