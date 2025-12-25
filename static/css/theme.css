@@ -1,0 +1,33 @@
+:root {
+  --glass-bg: rgba(255,255,255,0.18);
+  --glass-border: rgba(255,255,255,0.35);
+  --shadow: 0 20px 40px rgba(0,0,0,0.15);
+  --primary: #5b8cff;
+  --accent: #7cf3d0;
+  --text-main: #e5e7eb;
+  --text-muted: #9ca3af;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", system-ui;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top left, #5b8cff33, transparent 40%),
+    radial-gradient(circle at bottom right, #7cf3d033, transparent 40%),
+    linear-gradient(135deg, #020617, #0f172a);
+  color: var(--text-main);
+}
+
+.glass {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow);
+  border-radius: 18px;
+}
+
+.app-container {
+  padding: 24px;
+}
