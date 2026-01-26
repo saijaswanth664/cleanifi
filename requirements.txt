@@ -5,3 +5,4 @@ msoffcrypto-tool
 werkzeug
 gunicorn
 flask-talisman
+firebase-admin

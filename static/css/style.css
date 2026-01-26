@@ -446,6 +446,56 @@ input:focus,
     margin: 1rem 0;
 }
 
+.btn-google {
+    background: white;
+    color: #3c4043;
+    border: 1px solid #dadce0;
+    margin-top: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-weight: 500;
+}
+
+.btn-google:hover {
+    background: #f8f9fa;
+    border-color: #d2d4d7;
+    box-shadow: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
+    transform: translateY(-1px);
+}
+
+.btn-google img {
+    width: 20px;
+    height: 20px;
+}
+
+.divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 1.5rem 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    opacity: 0.6;
+}
+
+.divider::before,
+.divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.divider:not(:empty)::before {
+    margin-right: 1rem;
+}
+
+.divider:not(:empty)::after {
+    margin-left: 1rem;
+}
+
 .error-message {
     background: #f8d7da;
     border: 1px solid #f5c6cb;

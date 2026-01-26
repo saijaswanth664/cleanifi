@@ -4,6 +4,31 @@ import os
 import secrets
 import time
 import config
+import firebase_admin
+from firebase_admin import credentials, firestore, auth
+
+# Initialize Firebase Admin SDK
+firebase_app = None
+try:
+    # Check for service account JSON in environment variable
+    service_account_info = os.environ.get('FIREBASE_SERVICE_ACCOUNT')
+    if service_account_info:
+        # If it's a string, it might be JSON content
+        try:
+            cert_dict = json.loads(service_account_info)
+            cred = credentials.Certificate(cert_dict)
+        except json.JSONDecodeError:
+            # If it's not JSON, it might be a path to a file
+            cred = credentials.Certificate(service_account_info)
+        
+        firebase_app = firebase_admin.initialize_app(cred)
+        db = firestore.client()
+        print("Firebase initialized successfully!")
+    else:
+        db = None
+except Exception as e:
+    print(f"Warning: Firebase failed to initialize. Falling back to local JSON. Error: {e}")
+    db = None
 
 USER_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.json")
 INTEGRITY_DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "integrity.json")
@@ -88,9 +113,38 @@ def hash_password(password, salt=None):
 
 def add_user(username, password, question_index=None, answer=None):
     """Registers a new user with security questions."""
-    users = load_json_file(USER_DB_PATH)
     username = username.strip().lower()
     
+    if db:
+        try:
+            # Check if user exists in Firestore
+            user_ref = db.collection('users').document(username)
+            if user_ref.get().exists:
+                return False, "User already exists!"
+            
+            pwd_hash, salt = hash_password(password.strip())
+            user_data = {
+                "display_name": username,
+                "password": pwd_hash,
+                "salt": salt,
+                "created_at": firestore.SERVER_TIMESTAMP
+            }
+            
+            if question_index is not None and answer is not None:
+                answer_hash, answer_salt = hash_password(answer.strip().lower())
+                user_data.update({
+                    "question_index": question_index,
+                    "answer_hash": answer_hash,
+                    "answer_salt": answer_salt
+                })
+            
+            user_ref.set(user_data)
+            return True, "Account created successfully!"
+        except Exception as e:
+            return False, f"Firestore Error: {str(e)}"
+
+    # Local fallback
+    users = load_json_file(USER_DB_PATH)
     if username in users:
         return False, "User already exists!"
     
@@ -117,26 +171,37 @@ def add_user(username, password, question_index=None, answer=None):
         return False, "Error saving user data."
 
 def verify_user(username, password):
-    """Verifies credentials against the stored hashes with rate limiting."""
+    """Verifies credentials against Firestore or local hashes."""
     username = username.strip().lower()
     password = password.strip()
     now = time.time()
 
-    # Rate Limiting Check
+    # Rate Limiting Check (Keep in-memory for now)
     if username in login_attempts:
         stats = login_attempts[username]
         if stats["lockout_until"] > now:
             remaining = int(stats["lockout_until"] - now)
             return False, f"Account temporarily locked. Try again in {remaining}s."
-    
-    if not check_file_integrity(USER_DB_PATH):
-        print(f"CRITICAL: Integrity check failed for {USER_DB_PATH}")
 
-    users = load_json_file(USER_DB_PATH)
-    if username not in users:
+    stored_data = None
+    if db:
+        try:
+            user_doc = db.collection('users').document(username).get()
+            if user_doc.exists:
+                stored_data = user_doc.to_dict()
+        except Exception:
+            pass
+
+    if not stored_data:
+        # Fallback to local
+        if not check_file_integrity(USER_DB_PATH):
+            print(f"CRITICAL: Integrity check failed for {USER_DB_PATH}")
+        users = load_json_file(USER_DB_PATH)
+        stored_data = users.get(username)
+
+    if not stored_data:
         return False, "User not found!"
     
-    stored_data = users[username]
     stored_hash = stored_data.get("password")
     salt = stored_data.get("salt")
     
@@ -208,35 +273,92 @@ def reset_password(username, new_password):
         return True
     return False
 
-# Password Vault Functions
+# Password Vault Functions using Firestore
 def load_password_vault():
+    if db:
+        try:
+            vault_docs = db.collection('vault').get()
+            vault = {}
+            for doc in vault_docs:
+                vault[doc.id] = doc.to_dict().get('entries', [])
+            return vault
+        except Exception:
+            pass
     return load_json_file(PASSWORD_VAULT_PATH)
-
-def save_password_vault(vault):
-    if save_json_file(PASSWORD_VAULT_PATH, vault):
-        update_integrity(PASSWORD_VAULT_PATH)
-        return True
-    return False
 
 def save_file_password(username, filename, file_password):
     from datetime import datetime
-    vault = load_password_vault()
-    if username not in vault:
-        vault[username] = []
-    vault[username].append({
+    entry = {
         'filename': filename, 
         'password': file_password, 
         'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    })
-    return save_password_vault(vault)
+    }
+    
+    if db:
+        try:
+            user_vault_ref = db.collection('vault').document(username)
+            user_vault_ref.set({
+                'entries': firestore.ArrayUnion([entry])
+            }, merge=True)
+            return True
+        except Exception:
+            pass
+
+    # Local fallback
+    vault = load_password_vault()
+    if username not in vault:
+        vault[username] = []
+    vault[username].append(entry)
+    
+    # Save the whole vault locally
+    try:
+        with open(PASSWORD_VAULT_PATH, "w") as f:
+            json.dump(vault, f, indent=4)
+        update_integrity(PASSWORD_VAULT_PATH)
+        return True
+    except IOError:
+        return False
 
 def get_user_passwords(username):
+    if db:
+        try:
+            doc = db.collection('vault').document(username).get()
+            if doc.exists:
+                return doc.to_dict().get('entries', [])
+        except Exception:
+            pass
     vault = load_password_vault()
     return vault.get(username, [])
 
 def delete_password_entry(username, filename):
+    if db:
+        try:
+            user_vault_ref = db.collection('vault').document(username)
+            entries = get_user_passwords(username)
+            new_entries = [p for p in entries if p['filename'] != filename]
+            user_vault_ref.set({'entries': new_entries})
+            return True
+        except Exception:
+            pass
+            
     vault = load_password_vault()
     if username in vault:
         vault[username] = [p for p in vault[username] if p['filename'] != filename]
-        return save_password_vault(vault)
+        try:
+            with open(PASSWORD_VAULT_PATH, "w") as f:
+                json.dump(vault, f, indent=4)
+            update_integrity(PASSWORD_VAULT_PATH)
+            return True
+        except IOError:
+            return False
     return False
+
+def verify_google_token(id_token):
+    """Verifies a Firebase ID Token and returns user info."""
+    if not firebase_app:
+        return None, "Firebase not initialized"
+    try:
+        decoded_token = auth.verify_id_token(id_token)
+        return decoded_token, None
+    except Exception as e:
+        return None, str(e)

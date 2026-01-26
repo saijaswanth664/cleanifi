@@ -50,6 +50,15 @@
                 <button type="submit" class="btn btn-primary ripple">🚀 Continue</button>
             </form>
 
+            <div class="divider">
+                <span>OR</span>
+            </div>
+
+            <button type="button" class="btn btn-google ripple" onclick="signInWithGoogle()">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google">
+                Continue with Google
+            </button>
+
             <div id="loginMessage" class="message"></div>
 
             <button type="button" class="btn btn-link" onclick="showRecoveryForm()"
@@ -152,6 +161,64 @@
         {{ '🌕' if not dark_mode else '🌑' }}
     </button>
 </div>
+
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+
+<script>
+    // Firebase configuration
+    const firebaseConfig = {
+        apiKey: "AIzaSyD2N0zZvhK1hU4CGoZRDj9pcz1GwSabdOM",
+        authDomain: "cleanifi.firebaseapp.com",
+        projectId: "cleanifi",
+        storageBucket: "cleanifi.firebasestorage.app",
+        messagingSenderId: "594555661426",
+        appId: "1:594555661426:web:8f6eae02fe405423e226eb",
+        measurementId: "G-62RE26CJCV"
+    };
+
+    // Initialize Firebase
+    if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
+        firebase.initializeApp(firebaseConfig);
+    } else {
+        console.warn("Firebase not configured. Please enter your firebaseConfig in login.html");
+    }
+
+    const auth = firebase.auth();
+    const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+    async function signInWithGoogle() {
+        if (firebaseConfig.apiKey === "YOUR_API_KEY") {
+            alert("Firebase is not configured! Please see the instructions in implementation_plan.md to set up your Firebase project.");
+            return;
+        }
+
+        try {
+            const result = await auth.signInWithPopup(googleProvider);
+            const idToken = await result.user.getIdToken();
+
+            // Send token to backend
+            const response = await fetch('/login_with_google', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ id_token: idToken })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                window.location.href = data.redirect;
+            } else {
+                alert("Login failed: " + data.message);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Google Sign-In failed: " + error.message);
+        }
+    }
+</script>
 
 <script>
     function toggleForms() {

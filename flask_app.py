@@ -162,6 +162,25 @@ def login():
             return jsonify({'success': False, 'message': message})
     return jsonify({'success': False, 'message': 'Please enter username and password'})
 
+@app.route('/login_with_google', methods=['POST'])
+def login_with_google():
+    data = request.get_json()
+    id_token = data.get('id_token')
+    
+    if not id_token:
+        return jsonify({'success': False, 'message': 'No ID Token provided'})
+    
+    user_info, error = auth_utils.verify_google_token(id_token)
+    if error:
+        return jsonify({'success': False, 'message': f'Verification failed: {error}'})
+    
+    username = user_info.get('email', user_info.get('name'))
+    session['logged_in'] = True
+    session['username'] = username
+    session['user_info'] = user_info
+    
+    return jsonify({'success': True, 'redirect': url_for('dashboard')})
+
 @app.route('/signup', methods=['POST'])
 def signup():
     username = sanitize_input(request.form.get('username', '').strip())
