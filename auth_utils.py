@@ -257,6 +257,85 @@ def verify_security_answer(username, answer):
     current_hash, _ = hash_password(answer.strip().lower(), answer_salt)
     return current_hash == answer_hash
 
+def has_local_password(username):
+    """Checks if a user has a local password (as opposed to being Google-only)."""
+    username = username.strip().lower()
+    stored_data = None
+    if db:
+        try:
+            user_doc = db.collection('users').document(username).get()
+            if user_doc.exists:
+                return True
+        except Exception:
+            pass
+    
+    users = load_json_file(USER_DB_PATH)
+    return username in users
+
+def set_vault_password(username, password):
+    """Sets a special vault-only password for Google users."""
+    username = username.strip().lower()
+    pwd_hash, salt = hash_password(password.strip())
+    
+    if db:
+        try:
+            # Store it in a separate vault_masters collection or in the user doc
+            db.collection('vault_masters').document(username).set({
+                "password": pwd_hash,
+                "salt": salt,
+                "updated_at": firestore.SERVER_TIMESTAMP
+            })
+            return True
+        except Exception:
+            pass
+            
+    # Local fallback
+    masters = load_json_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), "vault_masters.json"))
+    masters[username] = {"password": pwd_hash, "salt": salt}
+    save_json_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), "vault_masters.json"), masters)
+    return True
+
+def has_vault_password(username):
+    """Checks if a Google-only user has already set a vault password."""
+    username = username.strip().lower()
+    if db:
+        try:
+            return db.collection('vault_masters').document(username).get().exists
+        except Exception:
+            pass
+    masters = load_json_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), "vault_masters.json"))
+    return username in masters
+
+def verify_vault_password(username, password):
+    """Verifies either the login password or the vault-specific password."""
+    # 1. Try regular login password if it exists
+    if has_local_password(username):
+        success, _ = verify_user(username, password)
+        if success: return True
+        
+    # 2. Try vault-specific password
+    username = username.strip().lower()
+    stored_data = None
+    if db:
+        try:
+            doc = db.collection('vault_masters').document(username).get()
+            if doc.exists:
+                stored_data = doc.to_dict()
+        except Exception:
+            pass
+            
+    if not stored_data:
+        masters = load_json_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), "vault_masters.json"))
+        stored_data = masters.get(username)
+        
+    if stored_data:
+        stored_hash = stored_data.get("password")
+        salt = stored_data.get("salt")
+        current_hash, _ = hash_password(password.strip(), salt)
+        return stored_hash == current_hash
+        
+    return False
+
 def reset_password(username, new_password):
     """Updates the user password."""
     users = load_json_file(USER_DB_PATH)
