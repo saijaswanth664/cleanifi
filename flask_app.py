@@ -731,6 +731,38 @@ def delete_saved_password():
     else:
         return jsonify({'success': False, 'message': 'Error deleting password'})
 
+@app.route('/check_vault_status')
+def check_vault_status():
+    init_session()
+    if not session.get('logged_in'):
+        return jsonify({'success': False})
+    
+    username = session.get('username')
+    # User has access if they have a local password OR a vault master password
+    has_access = auth_utils.has_local_password(username) or auth_utils.verify_vault_password(username, "") # verify_vault_password with "" checks if doc exists
+    
+    return jsonify({
+        'success': True,
+        'needs_setup': not auth_utils.has_local_password(username) and not auth_utils.has_vault_password(username)
+    })
+
+@app.route('/set_vault_password', methods=['POST'])
+def set_vault_password_route():
+    init_session()
+    if not session.get('logged_in'):
+        return jsonify({'success': False, 'message': 'Not logged in'})
+    
+    data = request.get_json()
+    password = data.get('password', '').strip()
+    username = session.get('username')
+    
+    if not password:
+        return jsonify({'success': False, 'message': 'Password is required'})
+        
+    if auth_utils.set_vault_password(username, password):
+        return jsonify({'success': True, 'message': 'Vault password set successfully'})
+    return jsonify({'success': False, 'message': 'Error setting vault password'})
+
 @app.route('/verify_vault', methods=['POST'])
 def verify_vault():
     init_session()
@@ -742,8 +774,7 @@ def verify_vault():
     username = session.get('username')
     
     if username and password:
-        success, message = auth_utils.verify_user(username, password)
-        if success:
+        if auth_utils.verify_vault_password(username, password):
             return jsonify({'success': True})
         else:
             return jsonify({'success': False, 'message': 'Incorrect verification password'})
