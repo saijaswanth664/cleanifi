@@ -13,13 +13,24 @@ import pickle
 from werkzeug.utils import secure_filename
 from auth_utils import sanitize_input
 from flask_talisman import Talisman
+from flask_session import Session
 
 app = Flask(__name__)
 # Force HTTPS and set security headers in production
 # Skip force_https for local development unless we have local certs
 Talisman(app, content_security_policy=None, force_https=False) 
 
-app.secret_key = secrets.token_hex(32)  # Generate a secure secret key
+# Session Configuration
+app.config['SECRET_KEY'] = secrets.token_hex(32)
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_FILE_DIR'] = os.path.join(app.root_path, 'flask_session')
+app.config['SESSION_PERMANENT'] = False
+app.config['SESSION_USE_SIGNER'] = True
+os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
+
+# Initialize Session
+Session(app)
+
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200MB max file size
 
