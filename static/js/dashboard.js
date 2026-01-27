@@ -596,7 +596,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             // Show/hide numeric options
             if (numericOptions) {
-                if (this.value in ['Mean', 'Median']) {
+                if (['Mean', 'Median'].includes(this.value)) {
                     numericOptions.style.display = 'flex';
                 } else {
                     numericOptions.style.display = 'none';

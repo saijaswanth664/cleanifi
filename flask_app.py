@@ -501,47 +501,63 @@ def apply_cleaning():
         if method in ["Keep As Is", "Keep NaN"]:
             continue
         
-        elif method == "Forward Fill":
+        print(f"DEBUG: Applying '{method}' to column '{col}'")
+        
+        if method == "Forward Fill":
             missing_before = df[col].isnull().sum()
-            df[col].ffill(inplace=True)
+            df[col] = df[col].ffill()
             cells_modified += missing_before
+            applied_methods.append(f"{col}: Forward Filled {missing_before} cells")
         
         elif method == "Backward Fill":
             missing_before = df[col].isnull().sum()
-            df[col].bfill(inplace=True)
+            df[col] = df[col].bfill()
             cells_modified += missing_before
+            applied_methods.append(f"{col}: Backward Filled {missing_before} cells")
         
         elif method == "Mean":
-            if pd.api.types.is_numeric_dtype(df[col]):
-                value = df[col].mean()
+            # Safely calculate mean from numeric values only
+            numeric_vals = pd.to_numeric(df[col], errors='coerce')
+            if numeric_vals.notna().any():
+                value = numeric_vals.mean()
                 if pd.notna(value):
-                    fill_type = type_choices.get(col, "Float")
+                    fill_type = type_choices.get(col, "Integer")
                     if fill_type == "Integer":
                         value = int(round(value))
                     else:
                         prec = precision_choices.get(col, 2)
                         value = round(float(value), prec)
-                        df[col] = df[col].round(prec)
                     
-                    missing_before = df[col].isnull().sum()
-                    df[col].fillna(value, inplace=True)
-                    cells_modified += missing_before
+                    # Fill only original nulls
+                    mask = df[col].isnull()
+                    missing_before = mask.sum()
+                    df[col] = df[col].fillna(value)
+                    
+                    if missing_before > 0:
+                        cells_modified += missing_before
+                        applied_methods.append(f"{col}: Mean Imputed {missing_before} cells (val={value})")
         
         elif method == "Median":
-            if pd.api.types.is_numeric_dtype(df[col]):
-                value = df[col].median()
+            # Safely calculate median from numeric values only
+            numeric_vals = pd.to_numeric(df[col], errors='coerce')
+            if numeric_vals.notna().any():
+                value = numeric_vals.median()
                 if pd.notna(value):
-                    fill_type = type_choices.get(col, "Float")
+                    fill_type = type_choices.get(col, "Integer")
                     if fill_type == "Integer":
                         value = int(round(value))
                     else:
                         prec = precision_choices.get(col, 2)
                         value = round(float(value), prec)
-                        df[col] = df[col].round(prec)
                     
-                    missing_before = df[col].isnull().sum()
-                    df[col].fillna(value, inplace=True)
-                    cells_modified += missing_before
+                    # Fill only original nulls
+                    mask = df[col].isnull()
+                    missing_before = mask.sum()
+                    df[col] = df[col].fillna(value)
+                    
+                    if missing_before > 0:
+                        cells_modified += missing_before
+                        applied_methods.append(f"{col}: Median Imputed {missing_before} cells (val={value})")
         
         elif method in ["Mode", "Most Frequent"]:
             non_null_values = df[col].dropna()
@@ -550,26 +566,29 @@ def apply_cleaning():
                 if len(mode_values) > 0:
                     value = mode_values[0]
                     missing_before = df[col].isnull().sum()
-                    df[col].fillna(value, inplace=True)
+                    df[col] = df[col].fillna(value)
                     cells_modified += missing_before
+                    applied_methods.append(f"{col}: Mode Imputed {missing_before} cells (val={value})")
         
         elif method == "Fill with 'Unknown'":
             missing_before = df[col].isnull().sum()
-            df[col].fillna("Unknown", inplace=True)
+            df[col] = df[col].fillna("Unknown")
             cells_modified += missing_before
+            applied_methods.append(f"{col}: Filled {missing_before} cells with 'Unknown'")
         
         elif method == "Delete Rows":
             before = len(df)
-            df.dropna(subset=[col], inplace=True)
+            df = df.dropna(subset=[col])
             rows_deleted += before - len(df)
             applied_methods.append(f"{col}: Deleted {before - len(df)} rows with NaNs")
         
         elif method == "Manual Input":
             custom_val = cleaning_choices.get(f"val_{col}", "")
             missing_before = df[col].isnull().sum()
-            df[col].fillna(custom_val, inplace=True)
-            cells_modified += missing_before
-            applied_methods.append(f"{col}: Imputed '{custom_val}' (Manual Input)")
+            df[col] = df[col].fillna(custom_val)
+            if missing_before > 0:
+                cells_modified += missing_before
+                applied_methods.append(f"{col}: Imputed '{custom_val}' (Manual Input)")
     
     # Convert column names to snake_case
     try:

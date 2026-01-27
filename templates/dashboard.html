@@ -454,12 +454,12 @@
                     </div>
 
                     {% if item.dtype == 'Numeric' %}
-                    <div class="numeric-options">
+                    <div class="numeric-options" style="display: flex; gap: 1rem; margin-top: 0.5rem;">
                         <label>
-                            <input type="radio" name="type_{{ item.column }}" value="Integer"> Integer
+                            <input type="radio" name="type_{{ item.column }}" value="Integer" checked> Integer
                         </label>
                         <label>
-                            <input type="radio" name="type_{{ item.column }}" value="Float" checked> Float
+                            <input type="radio" name="type_{{ item.column }}" value="Float"> Float
                         </label>
                         <div class="precision-slider" style="display: none;">
                             <label>Decimals: <span class="precision-value">2</span></label>

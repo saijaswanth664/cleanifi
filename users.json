@@ -20,5 +20,13 @@
         "question_index": 2,
         "answer_hash": "869eac87b6b347742df69653b82526a8714f3a379b1cbc1b5a7b4c0f49e92b1a",
         "answer_salt": "55bde0377bc3ccb01758f600524c7759"
+    },
+    "sai_jashu1": {
+        "display_name": "sai_jashu1",
+        "password": "d67b71cdab15836ab6f12292f9f9e2479390158f33b50b64eaa383c5d7e4ab90",
+        "salt": "263215b09dbb91010bf2d6b052df51fb",
+        "question_index": 2,
+        "answer_hash": "55e4a6cea0e141b4553849e4919280f400a69afc0b30cd3cccf51c0c1f0fcb62",
+        "answer_salt": "9c5db4933539a00bafe8c57103ffc15f"
     }
 }
