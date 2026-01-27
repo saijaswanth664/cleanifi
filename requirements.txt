@@ -6,3 +6,4 @@ werkzeug
 gunicorn
 flask-talisman
 firebase-admin
+flask-session
