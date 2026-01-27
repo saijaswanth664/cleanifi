@@ -1,0 +1,24 @@
+{
+    "sai_jashu": {
+        "display_name": "sai_jashu",
+        "password": "2ffb362d8270dfef8e10c0f454537f7981d1b6a608dc09c3d9495feb4bd1aa72"
+    },
+    "testuser_security": {
+        "display_name": "testuser_security",
+        "password": "eb28b92d4115bd751c02e142b15d77c75eae26961aa8574a5bfd385dfb31e64d",
+        "salt": "6e7ceb3af40fcdc5f4c24589db4ccc78"
+    },
+    "ratelimit_user": {
+        "display_name": "ratelimit_user",
+        "password": "31fada59a2d553c143514c52d80879dff451d95a675ace4835881ab77987414b",
+        "salt": "cd5e17540b8d7ad9338c27a140ea0e9d"
+    },
+    "recovery_test_user": {
+        "display_name": "recovery_test_user",
+        "password": "584e01235af3bf8c3d5fa596e6bafece3249241a017c525cea3a6ba818eec414",
+        "salt": "e71ce5a7894d9d39e608c4ad995e84d1",
+        "question_index": 2,
+        "answer_hash": "869eac87b6b347742df69653b82526a8714f3a379b1cbc1b5a7b4c0f49e92b1a",
+        "answer_salt": "55bde0377bc3ccb01758f600524c7759"
+    }
+}

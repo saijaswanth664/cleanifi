@@ -1,0 +1,3 @@
+@echo off
+echo Opening Cleanifi app in Chrome...
+start chrome http://localhost:5000

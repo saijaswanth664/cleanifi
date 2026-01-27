@@ -1,0 +1,26 @@
+{
+    "sai_jashu": {
+        "display_name": "sai_jashu",
+        "password": "2ffb362d8270dfef8e10c0f454537f7981d1b6a608dc09c3d9495feb4bd1aa72"
+    },
+    "newuser": {
+        "display_name": "newuser",
+        "password": "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8"
+    },
+    "sai_jashu..": {
+        "display_name": "sai_jashu..",
+        "password": "2ffb362d8270dfef8e10c0f454537f7981d1b6a608dc09c3d9495feb4bd1aa72"
+    },
+    "testuser": {
+        "display_name": "testuser",
+        "password": "c07e18203b774e8fe46a4f238261d18e2727ae54dd081d61b7e016ebb3c4ad0a"
+    },
+    "user1": {
+        "display_name": "user1",
+        "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9"
+    },
+    "tester": {
+        "display_name": "tester",
+        "password": "9bba5c53a0545e0c80184b946153c9f58387e3bd1d4ee35740f29ac2e718b019"
+    }
+}

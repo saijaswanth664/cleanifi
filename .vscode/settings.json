@@ -1,0 +1,9 @@
+{
+    "python.defaultInterpreterPath": "python",
+    "python.debugging.justMyCode": false,
+    "python.terminal.activateEnvironment": true,
+    "python.analysis.typeCheckingMode": "basic",
+    "files.readonlyInclude": {
+        "{**/.c4z/.extsrcs/*.PROTSYM.cbl,**/.c4z/.extsrcs/*.PROTSYM.listing}": true
+    }
+}

@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# Flask runtime data
+uploads/
+
+# Secrets & configs
+.env
+config.py
+
+# Local backups (contains sensitive data)
+local_backups/
+
+# OS files
+Thumbs.db
+.DS_Store

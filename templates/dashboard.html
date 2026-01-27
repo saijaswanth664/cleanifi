@@ -1,0 +1,566 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Sidebar -->
+<div class="sidebar">
+    <div class="sidebar-header">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="sidebar-logo"
+            onerror="this.style.display='none'">
+        <h2>Cleanifi</h2>
+        <p class="sidebar-caption">AI Data Intelligence</p>
+    </div>
+
+    <!-- Progress Indicator -->
+    <div class="progress-section">
+        <div class="info-label">Current Progress</div>
+        <div class="progress-bar">
+            <div class="progress-fill"
+                style="width: {{ '100%' if cleaning_done else '75%' if renaming_done else '50%' if df_data else '0%' }}">
+            </div>
+        </div>
+        <ul class="progress-list">
+            <li class="{{ 'completed' if df_data else '' }}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                Upload
+            </li>
+            <li class="{{ 'completed' if df_data and df_data['rows'] > 0 else '' }}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="3" y1="9" x2="21" y2="9"></line>
+                    <line x1="9" y1="21" x2="9" y2="9"></line>
+                </svg>
+                Manage
+            </li>
+            <li class="{{ 'completed' if renaming_done else '' }}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+                Rename
+            </li>
+            <li class="{{ 'completed' if cleaning_done else '' }}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                Complete
+            </li>
+        </ul>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="sidebar-actions">
+        <button class="btn btn-secondary ripple" onclick="undoAction()" {{ 'disabled' if history_count==0 else '' }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 7v6h6"></path>
+                <path d="M21 17a9 9 0 0 0-9-9 6.7 6.7 0 0 0-5 2.2L3 13"></path>
+            </svg>
+            Undo
+        </button>
+        <button class="btn btn-secondary ripple" onclick="resetApp()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M23 4v6h-6"></path>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
+            Reset
+        </button>
+    </div>
+
+    <!-- Mobile Nav Placeholder (Hidden on Desktop) -->
+    <nav class="mobile-nav">
+        <button onclick="window.scrollTo({top:0, behavior:'smooth'})" class="ripple">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+        </button>
+        <button onclick="toggleDarkMode()" class="ripple">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+        </button>
+        <button onclick="window.location.href='/logout'" class="ripple">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+            </svg>
+        </button>
+    </nav>
+
+    {% if df_stats %}
+    <div class="dataset-info">
+        <h3>📊 Dataset Info</h3>
+        <div class="info-grid">
+            <div class="info-card">
+                <div class="info-icon">📊</div>
+                <div class="info-label">Rows</div>
+                <div class="info-value">{{ df_stats.rows|number_format }}</div>
+            </div>
+            <div class="info-card">
+                <div class="info-icon">📑</div>
+                <div class="info-label">Columns</div>
+                <div class="info-value">{{ df_stats.columns }}</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="pro-tips">
+        <h4>💡 Pro Tips</h4>
+        <ul>
+            <li>Upload Excel (.xlsx) files only</li>
+            <li>Review AI suggestions before applying</li>
+            <li>Download cleaned data when done</li>
+        </ul>
+    </div>
+
+    <div class="pro-tips" id="passwordVaultSection" style="margin-top: 1rem;">
+        <h4>🔐 Password Vault</h4>
+        <div id="vaultOverlay"
+            style="text-align: center; padding: 1rem; background: rgba(0,0,0,0.05); border-radius: var(--radius-md); margin-top: 0.5rem;">
+            <p style="font-size: 0.8rem; margin-bottom: 0.75rem;">Vault is locked</p>
+            <button class="btn btn-secondary btn-small ripple" onclick="showVaultUnlock()" style="width: 100%;">🔓
+                Unlock</button>
+        </div>
+        <div id="passwordVaultContent" style="max-height: 300px; overflow-y: auto; display: none;">
+            <p class="info-text" style="font-size: 0.85rem;">Loading...</p>
+        </div>
+    </div>
+
+    <!-- Dark Mode Toggle -->
+    <button class="btn btn-secondary" onclick="toggleDarkMode()" style="margin-bottom: 1rem;">
+        <span id="themeIcon">{{ '☀️' if dark_mode else '🌙' }}</span> {{ 'Light Mode' if dark_mode else 'Dark Mode' }}
+    </button>
+
+    <button class="btn btn-logout" onclick="window.location.href='/logout'">🔒 Log Out</button>
+</div>
+
+<script>
+    async function toggleDarkMode() {
+        try {
+            const response = await fetch('/toggle_dark_mode', {
+                method: 'POST'
+            });
+            const data = await response.json();
+            if (data.success) {
+                location.reload();
+            }
+        } catch (error) {
+            console.error('Error toggling dark mode:', error);
+        }
+    }
+</script>
+
+<!-- Main Content -->
+<div class="main-content">
+    <!-- Hero Section -->
+    <div class="hero-section">
+        <button class="theme-toggle-top" onclick="toggleDarkMode()" title="Toggle Theme">
+            {{ '🌕' if not dark_mode else '🌑' }}
+        </button>
+
+        <h1>Data Studio</h1>
+        <p class="hero-subtitle">Elevated AI intelligence for pristine datasets.</p>
+    </div>
+
+    <!-- Step 1: Upload File -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">1</div>
+            <div>
+                <h2>Acquire Data</h2>
+                <p>Upload your dataset to begin the intelligence cycle</p>
+            </div>
+        </div>
+
+        <form id="uploadForm" enctype="multipart/form-data" class="upload-form">
+            <input type="file" id="fileInput" name="file" accept=".xlsx" onchange="handleFileUpload(event)">
+            <label for="fileInput" class="file-upload-label ripple">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <span>Drop Excel file here or click to browse</span>
+                <span class="upload-limit">Max Limit: 200MB</span>
+            </label>
+        </form>
+        <div id="uploadMessage"></div>
+    </div>
+
+    {% if df_data %}
+    <!-- Step 2: Dataset Preview -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">2</div>
+            <div>
+                <h2>Dataset Preview</h2>
+                <p>Review statistics and raw data</p>
+            </div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 3v18h18"></path>
+                        <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"></path>
+                    </svg>
+                </div>
+                <div class="stat-label">Total Rows</div>
+                <div class="stat-value">{{ df_stats.rows }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="3" y1="9" x2="21" y2="9"></line>
+                        <line x1="9" y1="21" x2="9" y2="9"></line>
+                    </svg>
+                </div>
+                <div class="stat-label">Columns</div>
+                <div class="stat-value">{{ df_stats.columns }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent-tertiary)"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 2v20M2 12h20"></path>
+                    </svg>
+                </div>
+                <div class="stat-label">Total Cells</div>
+                <div class="stat-value">{{ df_stats.total_cells }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path
+                            d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z">
+                        </path>
+                        <line x1="12" y1="9" x2="12" y2="13"></line>
+                        <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                </div>
+                <div class="stat-label">Missing</div>
+                <div class="stat-value">{{ df_stats.missing_total }}</div>
+            </div>
+        </div>
+
+        <details class="data-preview">
+            <summary>📊 View Full Dataset</summary>
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            {% for col in df_data.columns %}
+                            <th>{{ col }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in df_data.preview %}
+                        <tr>
+                            {% for col in df_data.columns %}
+                            <td>{{ row[col] if row[col] is not none else 'NaN' }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    </div>
+
+    <!-- Step 3: Row & Column Management -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">3</div>
+            <div>
+                <h2>Row & Column Management</h2>
+                <p>Delete unnecessary rows or columns</p>
+            </div>
+        </div>
+
+        <div class="management-grid">
+            <div class="management-section">
+                <h3>🗑️ Delete Columns</h3>
+                <select id="columnsToDelete" multiple class="multiselect">
+                    {% for col in df_data.columns %}
+                    <option value="{{ col }}">{{ col }}</option>
+                    {% endfor %}
+                </select>
+                <button class="btn btn-secondary" onclick="deleteColumns()">❌ Remove Selected Columns</button>
+            </div>
+
+            <div class="management-section">
+                <h3>🗑️ Delete Rows</h3>
+                <div class="radio-group">
+                    <label><input type="radio" name="deleteMode" value="range" checked> Range</label>
+                    <label><input type="radio" name="deleteMode" value="specific"> Specific Indices</label>
+                </div>
+
+                <div id="rangeInputs" class="row-inputs">
+                    <input type="number" id="startIdx" placeholder="Start Index" min="0"
+                        max="{{ df_stats.rows - 1 if df_stats else 0 }}" value="0">
+                    <input type="number" id="endIdx" placeholder="End Index" min="0"
+                        max="{{ df_stats.rows - 1 if df_stats else 0 }}"
+                        value="{{ [df_stats.rows - 1 if df_stats else 0, 5]|min }}">
+                    <button class="btn btn-secondary" onclick="deleteRowsRange()">❌ Remove Rows in Range</button>
+                </div>
+
+                <div id="specificInputs" class="row-inputs" style="display: none;">
+                    <input type="text" id="specificIndices" placeholder="e.g., 0, 2, 4">
+                    <button class="btn btn-secondary" onclick="deleteRowsSpecific()">❌ Remove Specific Rows</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 3.5: Column Reordering -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">3.5</div>
+            <div>
+                <h2>Column Arrangement</h2>
+                <p>Drag and drop to reorder columns</p>
+            </div>
+        </div>
+
+        <div class="reorder-section">
+            <p class="info-text">💡 Drag columns to rearrange them in your preferred order</p>
+            <div id="columnReorder" class="column-reorder-container">
+                {% for col in df_data.columns %}
+                <div class="column-item" draggable="true" data-column="{{ col }}">
+                    <span class="drag-handle">⋮⋮</span>
+                    <span class="column-name">{{ col }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            <button class="btn btn-primary" onclick="applyColumnReorder()">✓ Apply Column Order</button>
+        </div>
+    </div>
+
+
+    <!-- Step 4: Column Renaming -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">4</div>
+            <div>
+                <h2>Manual Column & Row Renaming</h2>
+                <p>Customize names and row labels</p>
+            </div>
+        </div>
+
+        {% if not renaming_done %}
+        <div class="rename-section">
+            <h3>✏️ Rename Columns (Optional)</h3>
+            <p class="info-text">💡 You can manually edit the column names below. We've suggested clean versions.</p>
+
+            <div id="columnRenames" class="rename-grid">
+                {% for col in df_data.columns %}
+                <div class="rename-item">
+                    <label>Original: <code>{{ col }}</code></label>
+                    <input type="text" class="rename-input" data-original="{{ col }}"
+                        value="{{ col|clean_column_name }}">
+                </div>
+                {% endfor %}
+            </div>
+
+            <h3>🏷️ Rename Rows (Index)</h3>
+            <div class="radio-group">
+                <label><input type="radio" name="rowRenameOption" value="keep" checked> Keep Current Indices</label>
+                <label><input type="radio" name="rowRenameOption" value="prefix"> Add Prefix</label>
+                <label><input type="radio" name="rowRenameOption" value="reset"> Reset to 1-based</label>
+            </div>
+
+            <div id="prefixInput" style="display: none; margin-top: 1rem;">
+                <input type="text" id="rowPrefix" placeholder="Enter prefix (e.g., 'Row_')" value="Row_">
+            </div>
+
+            <div class="button-group">
+                <button class="btn btn-primary" onclick="applyRenaming()">✅ Apply Names & Proceed</button>
+                <button class="btn btn-secondary" onclick="skipRenaming()">⏭️ Skip Renaming</button>
+            </div>
+        </div>
+        {% else %}
+        <div class="success-banner">✅ Dataset columns and rows have been renamed</div>
+        <button class="btn btn-secondary" onclick="location.reload()">🔄 Edit Names Again</button>
+        {% endif %}
+    </div>
+
+    <!-- Step 5: Missing Value Analysis -->
+    {% if missing_summary %}
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">5</div>
+            <div>
+                <h2>Missing Value Analysis</h2>
+                <p>Analyze and identify missing values</p>
+            </div>
+        </div>
+
+        <div class="missing-analysis">
+            {% for item in missing_summary %}
+            <div class="missing-item">
+                <h4>Column: <code>{{ item.column }}</code></h4>
+                <p><strong>Data Type:</strong> {{ item.dtype }} | <strong>Missing:</strong> {{ item.missing_count }}
+                    values ({{ item.missing_pct }})</p>
+
+                <div class="cleaning-options">
+                    <label>Choose cleaning method:</label>
+                    <select class="cleaning-select" data-column="{{ item.column }}" data-dtype="{{ item.dtype }}">
+                        {% if item.dtype == 'Numeric' %}
+                        <option value="Median">Median (recommended)</option>
+                        <option value="Mean">Mean</option>
+                        <option value="Mode">Mode</option>
+                        <option value="Delete Rows">Delete Rows</option>
+                        <option value="Keep As Is">Keep As Is</option>
+                        <option value="Manual Input">Manual Input</option>
+                        {% elif item.dtype == 'DateTime' %}
+                        <option value="Forward Fill">Forward Fill (recommended)</option>
+                        <option value="Backward Fill">Backward Fill</option>
+                        <option value="Most Frequent">Most Frequent</option>
+                        <option value="Keep NaN">Keep NaN</option>
+                        <option value="Delete Rows">Delete Rows</option>
+                        {% else %}
+                        <option value="Mode">Mode (recommended)</option>
+                        <option value="Fill with 'Unknown'">Fill with 'Unknown'</option>
+                        <option value="Delete Rows">Delete Rows</option>
+                        <option value="Keep As Is">Keep As Is</option>
+                        <option value="Manual Input">Manual Input</option>
+                        {% endif %}
+                    </select>
+
+                    <div class="manual-input" style="display: none;">
+                        <input type="text" placeholder="Enter custom value" class="manual-value">
+                    </div>
+
+                    {% if item.dtype == 'Numeric' %}
+                    <div class="numeric-options">
+                        <label>
+                            <input type="radio" name="type_{{ item.column }}" value="Integer"> Integer
+                        </label>
+                        <label>
+                            <input type="radio" name="type_{{ item.column }}" value="Float" checked> Float
+                        </label>
+                        <div class="precision-slider" style="display: none;">
+                            <label>Decimals: <span class="precision-value">2</span></label>
+                            <input type="range" min="0" max="6" value="2" class="precision-input">
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="apply-cleaning-section glass-card">
+            <h2>🚀 Intelligence Matrix Ready</h2>
+            <p>Deploy the specialized AI cleaning agents to your dataset.</p>
+            <button class="btn btn-primary ripple" onclick="applyCleaning()"
+                style="padding: 1.5rem 3rem; font-size: 1.25rem;">✨ Execute Cleaning</button>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Step 6: Download -->
+    {% if cleaning_done %}
+    <div class="step-section">
+        <div class="success-banner">
+            <h1>🎉 Cleaning Complete!</h1>
+            <p>Your data has been successfully cleaned and is ready to download</p>
+        </div>
+
+        <div class="download-section">
+            <h3>🔐 Secure Download Options</h3>
+            <label class="password-checkbox-label">
+                <input type="checkbox" id="passwordProtect" onchange="togglePasswordProtection()">
+                Protect downloaded file with password
+            </label>
+
+            <div id="passwordFields" style="display: none;">
+                <div id="passwordRequirements" class="info-text">
+                    <h4>📋 Password Requirements:</h4>
+                    <ul>
+                        <li id="req-length">✗ Minimum 7 characters</li>
+                        <li id="req-uppercase">✗ At least one uppercase letter (A-Z)</li>
+                        <li id="req-number">✗ At least one number (0-9)</li>
+                        <li id="req-special">✗ At least one special character (!@#$%^&*)</li>
+                    </ul>
+                </div>
+
+                <div class="password-input-group">
+                    <input type="password" id="downloadPassword" placeholder="Set download password"
+                        oninput="validatePassword()">
+                    <button type="button" class="eye-button" onclick="togglePasswordVisibility('downloadPassword')">
+                        👁️
+                    </button>
+                </div>
+
+                <div class="password-input-group">
+                    <input type="password" id="confirmDownloadPassword" placeholder="Confirm password"
+                        oninput="validatePassword()">
+                    <button type="button" class="eye-button"
+                        onclick="togglePasswordVisibility('confirmDownloadPassword')">
+                        👁️
+                    </button>
+                </div>
+
+                <div id="passwordMessage"></div>
+
+                <button class="btn btn-secondary btn-large" onclick="applyPassword()" id="applyPasswordBtn" disabled>
+                    ✓ Apply Password
+                </button>
+            </div>
+
+            <button class="btn btn-primary btn-large" onclick="downloadFile()" id="downloadBtn"
+                style="margin-top: 1rem;">
+                📥 Download Cleaned Excel
+            </button>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+</div>
+
+<!-- Vault Unlock Modal -->
+<div id="vaultUnlockModal" class="cleaning-report-modal">
+    <div class="report-content modal-small">
+        <h2>🔐 Unlock Vault</h2>
+        <p class="modal-subtitle">Enter your login password to proceed</p>
+
+        <div class="form-group">
+            <input type="password" id="vaultVerifyPassword" placeholder="Enter password">
+        </div>
+
+        <div id="vaultVerifyMessage"></div>
+
+        <div class="modal-actions">
+            <button class="btn btn-secondary ripple" onclick="closeVaultUnlock()">Cancel</button>
+            <button class="btn btn-primary ripple" onclick="verifyVault()">Unlock</button>
+        </div>
+    </div>
+</div>
+
+<div id="messageToast" class="toast"></div>
+
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}
