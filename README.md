@@ -1,3 +1,4 @@
+
 # Cleanifi
 
 Cleanifi is a Flask-based web application designed for secure user authentication and data handling.
@@ -16,3 +17,6 @@ Cleanifi is a Flask-based web application designed for secure user authenticatio
 
 ## How to Run
 1. Install requirements:
+
+# cleanifi
+CLEANIFI – AI-assisted data cleaning web application using Flask
