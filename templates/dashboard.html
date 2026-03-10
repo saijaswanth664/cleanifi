@@ -35,7 +35,7 @@
                     <line x1="3" y1="9" x2="21" y2="9"></line>
                     <line x1="9" y1="21" x2="9" y2="9"></line>
                 </svg>
-                Manage
+                Transform
             </li>
             <li class="{{ 'completed' if renaming_done else '' }}">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
@@ -122,7 +122,7 @@
     <div class="pro-tips">
         <h4>💡 Pro Tips</h4>
         <ul>
-            <li>Upload Excel (.xlsx) files only</li>
+            <li>Upload Excel (.xlsx) or CSV (.csv) files</li>
             <li>Review AI suggestions before applying</li>
             <li>Download cleaned data when done</li>
         </ul>
@@ -188,7 +188,7 @@
         </div>
 
         <form id="uploadForm" enctype="multipart/form-data" class="upload-form">
-            <input type="file" id="fileInput" name="file" accept=".xlsx" onchange="handleFileUpload(event)">
+            <input type="file" id="fileInput" name="file" accept=".xlsx,.csv" onchange="handleFileUpload(event)">
             <label for="fileInput" class="file-upload-label ripple">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"
                     stroke-linecap="round" stroke-linejoin="round">
@@ -196,10 +196,24 @@
                     <polyline points="17 8 12 3 7 8"></polyline>
                     <line x1="12" y1="3" x2="12" y2="15"></line>
                 </svg>
-                <span>Drop Excel file here or click to browse</span>
-                <span class="upload-limit">Max Limit: 200MB</span>
+                <span>Drop Excel or CSV file here or click to browse</span>
+                <span class="upload-limit">Supports .xlsx & .csv • Max 200MB</span>
             </label>
         </form>
+
+        <!-- Sheet Selection UI -->
+        <div id="sheetSelection"
+            style="{% if not sheet_names or sheet_names|length <= 1 %}display: none;{% endif %} margin-top: 1rem; text-align: left;">
+            <label class="info-label" style="display: block; margin-bottom: 0.5rem;">📑 Select Sheet to Clean:</label>
+            <div id="sheetButtons" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                {% for sheet in sheet_names %}
+                <button class="btn btn-small ripple {{ 'btn-primary' if sheet == current_sheet else 'btn-secondary' }}"
+                    onclick="changeSheet('{{ sheet }}')">{{ sheet }}</button>
+                {% endfor %}
+            </div>
+            <div id="sheetMessage"></div>
+        </div>
+
         <div id="uploadMessage"></div>
     </div>
 
@@ -289,10 +303,86 @@
         </details>
     </div>
 
-    <!-- Step 3: Row & Column Management -->
+    <!-- Step 3.1: Merge / Split Columns -->
     <div class="step-section">
         <div class="step-header">
-            <div class="step-number">3</div>
+            <div class="step-number">3.1</div>
+            <div>
+                <h2>Merge / Split Columns</h2>
+                <p>Combine or separate column data</p>
+            </div>
+        </div>
+
+        <div class="management-grid">
+            <div class="management-section">
+                <h3>🔗 Merge Columns</h3>
+                <p class="info-text">Select 2 or more columns to combine into one</p>
+                <select id="mergeColumns" multiple class="multiselect" style="min-height: 100px;">
+                    {% for col in df_data.columns %}
+                    <option value="{{ col }}">{{ col }}</option>
+                    {% endfor %}
+                </select>
+                <div style="display: flex; gap: 0.75rem; margin-top: 0.75rem; flex-wrap: wrap;">
+                    <input type="text" id="mergeSeparator" placeholder="Separator (e.g. - , _ )" value="_"
+                        style="flex: 1; min-width: 120px;">
+                    <input type="text" id="mergeNewName" placeholder="New column name (optional)"
+                        style="flex: 2; min-width: 180px;">
+                </div>
+                <button class="btn btn-primary ripple" onclick="mergeColumns()" style="margin-top: 0.75rem;">🔗 Merge
+                    Selected</button>
+            </div>
+
+            <div class="management-section">
+                <h3>✂️ Split Column</h3>
+                <p class="info-text">Split one column into multiple by a delimiter</p>
+                <select id="splitColumn" class="multiselect">
+                    {% for col in df_data.columns %}
+                    <option value="{{ col }}">{{ col }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" id="splitDelimiter" placeholder="Delimiter (e.g. , or - or |)" value=","
+                    style="margin-top: 0.75rem; width: 100%;">
+                <button class="btn btn-primary ripple" onclick="splitColumn()" style="margin-top: 0.75rem;">✂️ Split
+                    Column</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Step 3.2: Sort Data -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">3.2</div>
+            <div>
+                <h2>Sort Data</h2>
+                <p>Sort your dataset by any column</p>
+            </div>
+        </div>
+
+        <div class="sort-section" style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 200px;">
+                <label class="info-label" style="margin-bottom: 0.5rem; display: block;">Sort by Column</label>
+                <select id="sortColumn" class="multiselect" style="width: 100%;">
+                    {% for col in df_data.columns %}
+                    <option value="{{ col }}">{{ col }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="min-width: 180px;">
+                <label class="info-label" style="margin-bottom: 0.5rem; display: block;">Order</label>
+                <div class="radio-group">
+                    <label><input type="radio" name="sortOrder" value="asc" checked> ↑ Ascending</label>
+                    <label><input type="radio" name="sortOrder" value="desc"> ↓ Descending</label>
+                </div>
+            </div>
+            <button class="btn btn-primary ripple" onclick="sortData()" style="height: fit-content;">🔀 Apply
+                Sort</button>
+        </div>
+    </div>
+
+    <!-- Step 3.3: Row & Column Management -->
+    <div class="step-section">
+        <div class="step-header">
+            <div class="step-number">3.3</div>
             <div>
                 <h2>Row & Column Management</h2>
                 <p>Delete unnecessary rows or columns</p>
@@ -334,10 +424,10 @@
         </div>
     </div>
 
-    <!-- Step 3.5: Column Reordering -->
+    <!-- Step 3.4: Column Arrangement -->
     <div class="step-section">
         <div class="step-header">
-            <div class="step-number">3.5</div>
+            <div class="step-number">3.4</div>
             <div>
                 <h2>Column Arrangement</h2>
                 <p>Drag and drop to reorder columns</p>
@@ -358,11 +448,10 @@
         </div>
     </div>
 
-
-    <!-- Step 4: Column Renaming -->
+    <!-- Step 3.5: Manual Column & Row Renaming -->
     <div class="step-section">
         <div class="step-header">
-            <div class="step-number">4</div>
+            <div class="step-number">3.5</div>
             <div>
                 <h2>Manual Column & Row Renaming</h2>
                 <p>Customize names and row labels</p>
@@ -406,11 +495,11 @@
         {% endif %}
     </div>
 
-    <!-- Step 5: Missing Value Analysis -->
+    <!-- Step 4: Missing Value Analysis -->
     {% if missing_summary %}
     <div class="step-section">
         <div class="step-header">
-            <div class="step-number">5</div>
+            <div class="step-number">4</div>
             <div>
                 <h2>Missing Value Analysis</h2>
                 <p>Analyze and identify missing values</p>
@@ -531,9 +620,21 @@
                 </button>
             </div>
 
+            <div class="format-selector" style="margin-top: 1.5rem; margin-bottom: 1rem;">
+                <label class="info-label" style="margin-bottom: 0.5rem; display: block;">📄 Export Format</label>
+                <div class="radio-group">
+                    <label><input type="radio" name="exportFormat" value="xlsx" checked
+                            onchange="toggleFormatOptions()"> XLSX (Excel)</label>
+                    <label><input type="radio" name="exportFormat" value="csv" onchange="toggleFormatOptions()">
+                        CSV</label>
+                </div>
+                <p class="info-text" id="csvNote" style="display: none; margin-top: 0.5rem; font-size: 0.8rem;">⚠️
+                    Password protection is not available for CSV files</p>
+            </div>
+
             <button class="btn btn-primary btn-large" onclick="downloadFile()" id="downloadBtn"
                 style="margin-top: 1rem;">
-                📥 Download Cleaned Excel
+                📥 Download Cleaned Data
             </button>
         </div>
     </div>
@@ -559,6 +660,258 @@
         </div>
     </div>
 </div>
+
+<!-- Floating View Dataset Button -->
+<!-- Floating View Dataset Button -->
+{% if df_data %}
+<div id="floatingDatasetBtn" onclick="openDatasetModal()" title="View Dataset">
+    <span class="fab-icon">📊</span>
+    <span class="fab-label">View Data</span>
+</div>
+
+<!-- Dataset Modal -->
+<div id="datasetModal" class="dataset-modal-overlay">
+    <div class="dataset-modal-content">
+        <div class="dataset-modal-header" style="display: block;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>📊 Current Dataset</h2>
+                <button class="close-modal-btn" onclick="closeDatasetModal()">×</button>
+            </div>
+
+            {% if sheet_names and sheet_names|length > 1 %}
+            <div style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                <label class="info-label" style="display: block; margin-bottom: 0.5rem; font-size: 0.9rem;">📑 Switch
+                    Sheet:</label>
+                <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                    {% for sheet in sheet_names %}
+                    <button
+                        class="btn btn-small ripple {{ 'btn-primary' if sheet == current_sheet else 'btn-secondary' }}"
+                        onclick="changeSheet('{{ sheet }}')">{{ sheet }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        <div class="dataset-modal-body">
+            <div class="table-container">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            {% for col in df_data.columns %}
+                            <th>{{ col }}</th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in df_data.preview %}
+                        <tr>
+                            {% for col in df_data.columns %}
+                            <td>{{ row[col] if row[col] is not none else 'NaN' }}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Floating Button Styles */
+    #floatingDatasetBtn {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+        color: #fff;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 9998;
+        box-shadow: 0 6px 24px rgba(79, 70, 229, 0.45), 0 2px 8px rgba(0, 0, 0, 0.2);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        animation: fabPulse 2.5s ease-in-out infinite;
+        border: none;
+        user-select: none;
+        overflow: hidden;
+    }
+
+    #floatingDatasetBtn:hover {
+        width: 140px;
+        border-radius: 32px;
+        transform: translateY(-4px) scale(1.05);
+        box-shadow: 0 10px 36px rgba(79, 70, 229, 0.55), 0 4px 12px rgba(0, 0, 0, 0.25);
+        animation: none;
+    }
+
+    #floatingDatasetBtn:active {
+        transform: translateY(-1px) scale(0.97);
+    }
+
+    #floatingDatasetBtn .fab-icon {
+        font-size: 1.5rem;
+        line-height: 1;
+        transition: transform 0.3s ease;
+    }
+
+    #floatingDatasetBtn:hover .fab-icon {
+        transform: scale(1.1);
+    }
+
+    #floatingDatasetBtn .fab-label {
+        font-size: 0;
+        opacity: 0;
+        font-weight: 600;
+        white-space: nowrap;
+        letter-spacing: 0.3px;
+        transition: all 0.3s ease;
+        max-width: 0;
+        overflow: hidden;
+    }
+
+    #floatingDatasetBtn:hover .fab-label {
+        font-size: 0.75rem;
+        opacity: 1;
+        max-width: 100px;
+        margin-top: 2px;
+    }
+
+    @keyframes fabPulse {
+
+        0%,
+        100% {
+            box-shadow: 0 6px 24px rgba(79, 70, 229, 0.45), 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        50% {
+            box-shadow: 0 6px 32px rgba(79, 70, 229, 0.7), 0 2px 12px rgba(0, 0, 0, 0.3);
+        }
+    }
+
+    /* Modal Styles */
+    .dataset-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        z-index: 9999;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .dataset-modal-overlay.show {
+        display: flex;
+        opacity: 1;
+    }
+
+    .dataset-modal-content {
+        background: var(--bg-secondary);
+        width: 90%;
+        max-width: 1200px;
+        max-height: 85vh;
+        border-radius: 16px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        display: flex;
+        flex-direction: column;
+        transform: scale(0.95);
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        border: 1px solid var(--border-color);
+    }
+
+    .dataset-modal-overlay.show .dataset-modal-content {
+        transform: scale(1);
+    }
+
+    .dataset-modal-header {
+        padding: 1.5rem 2rem;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .dataset-modal-header h2 {
+        margin: 0;
+        font-size: 1.5rem;
+        color: var(--text-primary);
+    }
+
+    .close-modal-btn {
+        background: none;
+        border: none;
+        font-size: 2rem;
+        color: var(--text-secondary);
+        cursor: pointer;
+        line-height: 1;
+        padding: 0;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+
+    .close-modal-btn:hover {
+        background: rgba(128, 128, 128, 0.1);
+        color: var(--text-primary);
+    }
+
+    .dataset-modal-body {
+        padding: 2rem;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    /* Reuse existing table styles but ensure container fits */
+    .dataset-modal-body .table-container {
+        max-height: none;
+        overflow: auto;
+    }
+</style>
+
+<script>
+    function openDatasetModal() {
+        const modal = document.getElementById('datasetModal');
+        modal.classList.add('show');
+        document.body.style.overflow = 'hidden'; // Prevent background scrolling
+    }
+
+    function closeDatasetModal() {
+        const modal = document.getElementById('datasetModal');
+        modal.classList.remove('show');
+        document.body.style.overflow = ''; // Restore scrolling
+    }
+
+    // Close on click outside
+    document.getElementById('datasetModal').addEventListener('click', function (e) {
+        if (e.target === this) {
+            closeDatasetModal();
+        }
+    });
+
+    // Close on Escape key
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && document.getElementById('datasetModal').classList.contains('show')) {
+            closeDatasetModal();
+        }
+    });
+</script>
+{% endif %}
 
 <div id="messageToast" class="toast"></div>
 

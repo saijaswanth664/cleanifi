@@ -10,10 +10,12 @@ import os
 import io
 import secrets
 import pickle
+import tempfile
 from werkzeug.utils import secure_filename
 from auth_utils import sanitize_input
 from flask_talisman import Talisman
 from flask_session import Session
+import subprocess
 
 app = Flask(__name__)
 # Force HTTPS and set security headers in production
@@ -25,7 +27,7 @@ app.config['SECRET_KEY'] = secrets.token_hex(32)
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = os.path.join(app.root_path, 'flask_session')
 app.config['SESSION_PERMANENT'] = False
-app.config['SESSION_USE_SIGNER'] = True
+app.config['SESSION_USE_SIGNER'] = False
 os.makedirs(app.config['SESSION_FILE_DIR'], exist_ok=True)
 
 # Initialize Session
@@ -100,20 +102,61 @@ def is_strong_password(password):
     return True, "Strong password!"
 
 def encrypt_excel(df, password):
-    """Encrypts a pandas DataFrame into a password-protected Excel file."""
-    # 1. Save DF to an unencrypted ByteStream
-    unencrypted_buffer = io.BytesIO()
-    with pd.ExcelWriter(unencrypted_buffer, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='Cleaned Data')
-    unencrypted_buffer.seek(0)
-
-    # 2. Encrypt the ByteStream using msoffcrypto
-    encrypted_buffer = io.BytesIO()
-    ms_file = msoffcrypto.OfficeFile(unencrypted_buffer)
-    ms_file.encrypt(password, encrypted_buffer)
-    encrypted_buffer.seek(0)
+    """Encrypts a pandas DataFrame into a native password-protected Excel file using PowerShell/COM."""
+    temp_dir = tempfile.gettempdir()
+    unsecured_path = os.path.join(temp_dir, f"unsecured_{int(time.time())}.xlsx")
+    secured_path = os.path.join(temp_dir, f"secured_{int(time.time())}.xlsx")
     
-    return encrypted_buffer
+    try:
+        # 1. Save to temporary unsecured file
+        df.to_excel(unsecured_path, index=False, engine='openpyxl')
+        
+        # 2. Use PowerShell to encrypt via Excel COM
+        # We escape single quotes in the password for the PowerShell string
+        safe_password = password.replace("'", "''")
+        
+        ps_script = f"""
+        $excel = New-Object -ComObject Excel.Application
+        $excel.Visible = $false
+        $excel.DisplayAlerts = $false
+        try {{
+            $wb = $excel.Workbooks.Open('{unsecured_path}')
+            $wb.Password = '{safe_password}'
+            $wb.SaveAs('{secured_path}')
+            $wb.Close()
+        }} finally {{
+            $excel.Quit()
+            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
+        }}
+        """
+        
+        result = subprocess.run(["powershell", "-Command", ps_script], capture_output=True, text=True)
+        
+        if result.returncode == 0 and os.path.exists(secured_path):
+            with open(secured_path, "rb") as f:
+                output = io.BytesIO(f.read())
+            return output, True
+        else:
+            print(f"ERROR: PowerShell encryption failed. Return code: {result.returncode}")
+            # Fallback to unencrypted
+            with open(unsecured_path, "rb") as f:
+                output = io.BytesIO(f.read())
+            return output, False
+            
+    except Exception as e:
+        print(f"DEBUG: Encryption fallback engaged. Reason: {e}")
+        # Final fallback
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Cleaned Data')
+        output.seek(0)
+        return output, False
+    finally:
+        # Cleanup
+        for path in [unsecured_path, secured_path]:
+            if os.path.exists(path):
+                try: os.remove(path)
+                except: pass
 
 def df_to_session_dict(df):
     """Convert DataFrame to a JSON-serializable dict for session storage."""
@@ -305,7 +348,9 @@ def dashboard():
                          original_stats=session.get('original_stats', {}),
                          renaming_done=session.get('renaming_done', False),
                          cleaning_done=session.get('cleaning_done', False),
-                         history_count=len(session.get('history', [])))
+                         history_count=len(session.get('history', [])),
+                         sheet_names=session.get('sheet_names', []),
+                         current_sheet=session.get('current_sheet', None))
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -324,10 +369,35 @@ def upload_file():
     if file.filename == '':
         return jsonify({'success': False, 'message': 'No file selected'})
     
-    if file and file.filename.endswith('.xlsx'):
+    allowed_extensions = ('.xlsx', '.csv')
+    if file and file.filename.lower().endswith(allowed_extensions):
         try:
-            # Read the Excel file
-            df = pd.read_excel(file)
+            # Save file to temp location for multi-sheet support
+            temp_dir = tempfile.gettempdir()
+            temp_filename = secure_filename(f"cleanifi_{int(time.time())}_{file.filename}")
+            temp_path = os.path.join(temp_dir, temp_filename)
+            file.save(temp_path)
+            
+            # Store temp path in session
+            session['temp_file_path'] = temp_path
+            session['file_type'] = 'csv' if file.filename.lower().endswith('.csv') else 'xlsx'
+            
+            # Read the file based on extension
+            filename_lower = file.filename.lower()
+            sheet_names = []
+            
+            if filename_lower.endswith('.csv'):
+                df = pd.read_csv(temp_path)
+                current_sheet = None
+            else:
+                # Get sheet names for Excel
+                xl = pd.ExcelFile(temp_path)
+                sheet_names = xl.sheet_names
+                current_sheet = sheet_names[0]
+                df = pd.read_excel(temp_path, sheet_name=current_sheet)
+                
+                session['sheet_names'] = sheet_names
+                session['current_sheet'] = current_sheet
             
             # Convert DataFrame to dict for session storage
             session['df'] = df_to_session_dict(df)
@@ -340,7 +410,7 @@ def upload_file():
             session['history'] = []
             session['change_log'] = []
             
-            # Store original stats - convert numpy types to Python types for JSON serialization
+            # Store original stats
             session['original_stats'] = {
                 "rows": int(len(df)),
                 "cols": int(len(df.columns)),
@@ -352,7 +422,9 @@ def upload_file():
             return jsonify({
                 'success': True,
                 'message': f'File uploaded successfully: {file.filename}',
-                'stats': session['original_stats']
+                'stats': session['original_stats'],
+                'sheets': sheet_names,
+                'current_sheet': current_sheet
             })
         except Exception as e:
             import traceback
@@ -365,131 +437,213 @@ def upload_file():
             print("=" * 80)
             return jsonify({'success': False, 'message': f'Error reading file: {str(e)}'})
     
-    return jsonify({'success': False, 'message': 'Please upload an .xlsx file'})
+    return jsonify({'success': False, 'message': 'Please upload an .xlsx or .csv file'})
+
+@app.route('/change_sheet', methods=['POST'])
+def change_sheet():
+    data = request.get_json()
+    sheet_name = data.get('sheet_name')
+    
+    if not sheet_name:
+        return jsonify({'success': False, 'message': 'No sheet name provided'})
+        
+    temp_path = session.get('temp_file_path')
+    if not temp_path or not os.path.exists(temp_path):
+        return jsonify({'success': False, 'message': 'File session expired. Please upload again.'})
+        
+    try:
+        df = pd.read_excel(temp_path, sheet_name=sheet_name)
+        
+        session['df'] = df_to_session_dict(df)
+        session['uploaded_original_df'] = df_to_session_dict(df)
+        session['original_columns'] = list(df.columns)
+        session['columns_cleaned'] = False
+        session['cleaning_done'] = False
+        session['renaming_done'] = False
+        session['history'] = []
+        session['change_log'] = []
+        session['current_sheet'] = sheet_name
+        
+        session['original_stats'] = {
+            "rows": int(len(df)),
+            "cols": int(len(df.columns)),
+            "missing": int(df.isnull().sum().sum()),
+            "quality": round(100 - (df.isnull().sum().sum() / df.size * 100), 2)
+        }
+        session.modified = True
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Switched to sheet: {sheet_name}',
+            'stats': session['original_stats']
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error loading sheet: {str(e)}'})
 
 @app.route('/delete_columns', methods=['POST'])
 def delete_columns():
-    data = request.get_json()
-    columns_to_delete = data.get('columns', [])
-    
-    if not columns_to_delete:
-        return jsonify({'success': False, 'message': 'No columns selected'})
-    
-    df = pd.DataFrame(session['df'])
-    save_to_history(f"Deleted columns: {', '.join(columns_to_delete)}")
-    
-    df = df.drop(columns=columns_to_delete)
-    session['df'] = df_to_session_dict(df)
-    session['original_columns'] = list(df.columns)
-    session['change_log'].append(f"Removed columns: {', '.join(columns_to_delete)}")
-    session.modified = True
-    
-    return jsonify({'success': True, 'message': f'Removed {len(columns_to_delete)} columns'})
+    try:
+        data = request.get_json()
+        columns_to_delete = data.get('columns', [])
+
+        if not columns_to_delete:
+            return jsonify({'success': False, 'message': 'No columns selected'})
+
+        df = pd.DataFrame(session['df'])
+
+        # Verify all columns exist
+        missing = [c for c in columns_to_delete if c not in df.columns]
+        if missing:
+            return jsonify({'success': False, 'message': f'Column(s) not found: {", ".join(missing)}'})
+
+        save_to_history(f"Deleted columns: {', '.join(columns_to_delete)}")
+        df = df.drop(columns=columns_to_delete)
+        session['df'] = df_to_session_dict(df)
+        session['original_columns'] = list(df.columns)
+        session['change_log'].append(f"Removed columns: {', '.join(columns_to_delete)}")
+        session.modified = True
+
+        return jsonify({'success': True, 'message': f'Removed {len(columns_to_delete)} column(s)'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error deleting columns: {str(e)}'})
 
 @app.route('/delete_rows', methods=['POST'])
 def delete_rows():
-    data = request.get_json()
-    mode = data.get('mode')
-    
-    df = pd.DataFrame(session['df'])
-    rows_before = len(df)
-    
-    if mode == 'range':
-        start_idx = int(data.get('start', 0))
-        end_idx = int(data.get('end', 0))
-        
-        # Validation: Bounds check
-        if start_idx < 0 or end_idx >= len(df) or start_idx > end_idx:
-            return jsonify({'success': False, 'message': f'Invalid range: {start_idx} to {end_idx}. Valid range is 0 to {len(df)-1}.'})
-        
-        if start_idx <= end_idx:
-            target_indices = df.index[start_idx:end_idx+1]
+    try:
+        data = request.get_json()
+        mode = data.get('mode')
+
+        df = pd.DataFrame(session['df'])
+        rows_before = len(df)
+
+        if mode == 'range':
+            start_idx = int(data.get('start', 0))
+            end_idx = int(data.get('end', 0))
+
+            if start_idx < 0 or end_idx >= len(df) or start_idx > end_idx:
+                return jsonify({'success': False, 'message': f'Invalid range: {start_idx} to {end_idx}. Valid range is 0 to {len(df)-1}.'})
+
+            target_indices = df.index[start_idx:end_idx + 1]
             df = df.drop(index=target_indices)
-    elif mode == 'specific':
-        indices = data.get('indices', [])
-        valid_indices = [i for i in indices if i in df.index]
-        if valid_indices:
+
+        elif mode == 'specific':
+            indices = data.get('indices', [])
+            if not indices:
+                return jsonify({'success': False, 'message': 'No row indices provided'})
+            valid_indices = [i for i in indices if i in df.index]
+            if not valid_indices:
+                return jsonify({'success': False, 'message': 'None of the provided indices exist in the dataset'})
             df = df.drop(index=valid_indices)
-    
-    rows_after = len(df)
-    session['df'] = df_to_session_dict(df)
-    session.modified = True
-    
-    return jsonify({'success': True, 'message': f'Removed {rows_before - rows_after} rows'})
+        else:
+            return jsonify({'success': False, 'message': 'Invalid delete mode'})
+
+        df = df.reset_index(drop=True)
+        rows_after = len(df)
+        removed = rows_before - rows_after
+        session['df'] = df_to_session_dict(df)
+        session['change_log'].append(f"Deleted {removed} row(s) ({mode} mode)")
+        session.modified = True
+
+        return jsonify({'success': True, 'message': f'Removed {removed} row(s)'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error deleting rows: {str(e)}'})
 
 @app.route('/reorder_columns', methods=['POST'])
 def reorder_columns():
-    data = request.get_json()
-    new_order = data.get('column_order', [])
-    
-    if not new_order:
-        return jsonify({'success': False, 'message': 'No column order provided'})
-    
-    df = pd.DataFrame(session['df'])
-    
-    # Verify all columns exist
-    if set(new_order) != set(df.columns):
-        return jsonify({'success': False, 'message': 'Column mismatch'})
-    
-    # Reorder columns
-    df = df[new_order]
-    save_to_history(f"Reordered columns")
-    
-    session['df'] = df_to_session_dict(df)
-    session['original_columns'] = list(df.columns)
-    session.modified = True
-    
-    return jsonify({'success': True, 'message': 'Columns reordered successfully'})
+    try:
+        data = request.get_json()
+        new_order = data.get('column_order', [])
+
+        if not new_order:
+            return jsonify({'success': False, 'message': 'No column order provided'})
+
+        df = pd.DataFrame(session['df'])
+
+        if set(new_order) != set(df.columns):
+            return jsonify({'success': False, 'message': 'Column mismatch — please reload and try again'})
+
+        save_to_history("Reordered columns")
+        df = df[new_order]
+        session['df'] = df_to_session_dict(df)
+        session['original_columns'] = list(df.columns)
+        session['change_log'].append("Reordered columns")
+        session.modified = True
+
+        return jsonify({'success': True, 'message': 'Columns reordered successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error reordering columns: {str(e)}'})
 
 @app.route('/add_serial_number', methods=['POST'])
 def add_serial_number():
-    data = request.get_json()
-    prefix = data.get('prefix', 'row_')
-    position = data.get('position', 'start')  # 'start' or 'end'
-    
-    df = pd.DataFrame(session['df'])
-    save_to_history("Added serial number column")
-    
-    # Generate serial numbers
-    serial_numbers = [f"{prefix}{i+1}" for i in range(len(df))]
-    
-    # Add as first or last column
-    if position == 'start':
-        df.insert(0, 'serial_number', serial_numbers)
-    else:
-        df['serial_number'] = serial_numbers
-    
-    session['df'] = df_to_session_dict(df)
-    session['original_columns'] = list(df.columns)
-    session.modified = True
-    
-    return jsonify({'success': True, 'message': 'Serial number column added'})
+    try:
+        data = request.get_json()
+        prefix = data.get('prefix', 'row_') or 'row_'
+        position = data.get('position', 'start')
+
+        df = pd.DataFrame(session['df'])
+
+        # Use a unique column name to avoid conflicts
+        col_name = 'serial_number'
+        counter = 1
+        while col_name in df.columns:
+            col_name = f'serial_number_{counter}'
+            counter += 1
+
+        save_to_history("Added serial number column")
+        serial_numbers = [f"{prefix}{i + 1}" for i in range(len(df))]
+
+        if position == 'start':
+            df.insert(0, col_name, serial_numbers)
+        else:
+            df[col_name] = serial_numbers
+
+        session['df'] = df_to_session_dict(df)
+        session['original_columns'] = list(df.columns)
+        session['change_log'].append(f"Added serial number column '{col_name}'")
+        session.modified = True
+
+        return jsonify({'success': True, 'message': f'Serial number column "{col_name}" added'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error adding serial number: {str(e)}'})
 
 @app.route('/rename_columns', methods=['POST'])
 def rename_columns():
-    data = request.get_json()
-    new_names = data.get('new_names', {})
-    row_option = data.get('row_option', 'keep')
-    row_prefix = data.get('row_prefix', '')
-    
-    df = pd.DataFrame(session['df'])
-    
-    # Rename columns
-    if new_names:
-        df.rename(columns=new_names, inplace=True)
-    
-    # Handle row renaming
-    if row_option == 'prefix' and row_prefix:
-        df.index = [f"{row_prefix}{i}" for i in range(len(df))]
-    elif row_option == 'reset':
-        df.index = range(1, len(df) + 1)
-    
-    session['df'] = df_to_session_dict(df)
-    session['original_columns'] = list(df.columns)
-    session['renaming_done'] = True
-    session.modified = True
-    
-    return jsonify({'success': True, 'message': 'Renaming applied successfully'})
+    try:
+        data = request.get_json()
+        new_names = data.get('new_names', {})
+        row_option = data.get('row_option', 'keep')
+        row_prefix = data.get('row_prefix', '')
+
+        df = pd.DataFrame(session['df'])
+
+        # Check for duplicate target names (two columns renamed to the same name)
+        if new_names:
+            target_names = list(new_names.values())
+            if len(target_names) != len(set(target_names)):
+                return jsonify({'success': False, 'message': 'Two or more columns cannot be renamed to the same name'})
+
+            # Check new names don't clash with existing columns not being renamed
+            existing_cols = set(df.columns) - set(new_names.keys())
+            clashes = [v for v in new_names.values() if v in existing_cols]
+            if clashes:
+                return jsonify({'success': False, 'message': f'Name(s) already exist: {", ".join(clashes)}'})
+
+            df.rename(columns=new_names, inplace=True)
+
+        if row_option == 'prefix' and row_prefix:
+            df.index = [f"{row_prefix}{i}" for i in range(len(df))]
+        elif row_option == 'reset':
+            df.index = range(1, len(df) + 1)
+
+        session['df'] = df_to_session_dict(df)
+        session['original_columns'] = list(df.columns)
+        session['renaming_done'] = True
+        session['change_log'].append(f"Renamed {len(new_names)} column(s)")
+        session.modified = True
+
+        return jsonify({'success': True, 'message': 'Renaming applied successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error renaming columns: {str(e)}'})
 
 @app.route('/apply_cleaning', methods=['POST'])
 def apply_cleaning():
@@ -656,9 +810,24 @@ def download():
         return "No data to download", 400
     
     df = pd.DataFrame(session['df'])
+    export_format = request.args.get('format', 'xlsx')
     use_password = request.args.get('password_protect') == 'true'
     password = request.args.get('password', '')
     
+    if export_format == 'csv':
+        # CSV export (no password protection)
+        output = io.StringIO()
+        df.to_csv(output, index=False)
+        output.seek(0)
+        csv_bytes = io.BytesIO(output.getvalue().encode('utf-8'))
+        return send_file(
+            csv_bytes,
+            mimetype='text/csv',
+            as_attachment=True,
+            download_name='cleaned_data.csv'
+        )
+    
+    # XLSX export
     if use_password and password:
         # Validate password
         is_valid, msg = is_strong_password(password)
@@ -670,8 +839,13 @@ def download():
         if username:
             auth_utils.save_file_password(username, "cleaned_data_protected.xlsx", password)
         
-        output = encrypt_excel(df, password)
-        filename = "cleaned_data_protected.xlsx"
+        output, success = encrypt_excel(df, password)
+        if success:
+            filename = "cleaned_data_protected.xlsx"
+        else:
+            # Fallback to unencrypted if encryption failed
+            filename = "cleaned_data_unprotected.xlsx"
+            print("WARNING: Returning unencrypted file because encryption failed.")
     else:
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
@@ -685,6 +859,112 @@ def download():
         as_attachment=True,
         download_name=filename
     )
+
+@app.route('/sort_data', methods=['POST'])
+def sort_data():
+    try:
+        data = request.get_json()
+        column = data.get('column')
+        order = data.get('order', 'asc')
+
+        if not column:
+            return jsonify({'success': False, 'message': 'No column selected'})
+
+        df = pd.DataFrame(session['df'])
+        if column not in df.columns:
+            return jsonify({'success': False, 'message': f'Column "{column}" not found'})
+
+        save_to_history(f"Sorted by {column} ({order})")
+        ascending = order == 'asc'
+        df = df.sort_values(by=column, ascending=ascending, na_position='last').reset_index(drop=True)
+
+        session['df'] = df_to_session_dict(df)
+        session['change_log'].append(f"Sorted by '{column}' ({'ascending' if ascending else 'descending'})")
+        session.modified = True
+
+        return jsonify({'success': True, 'message': f'Data sorted by "{column}" ({"ascending" if ascending else "descending"})'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error sorting data: {str(e)}'})
+
+@app.route('/merge_columns', methods=['POST'])
+def merge_columns():
+    try:
+        data = request.get_json()
+        columns = data.get('columns', [])
+        separator = data.get('separator', '_')
+        new_name = data.get('new_name', '').strip()
+
+        if len(columns) < 2:
+            return jsonify({'success': False, 'message': 'Select at least 2 columns to merge'})
+
+        if not new_name:
+            new_name = separator.join(columns)
+
+        df = pd.DataFrame(session['df'])
+
+        # Check all selected columns exist
+        for col in columns:
+            if col not in df.columns:
+                return jsonify({'success': False, 'message': f'Column "{col}" not found'})
+
+        # Warn if new name already exists (and is not one of the merged columns)
+        if new_name in df.columns and new_name not in columns:
+            return jsonify({'success': False, 'message': f'A column named "{new_name}" already exists. Choose a different name.'})
+
+        save_to_history(f"Merged columns: {', '.join(columns)}")
+
+        # Merge: safely convert each cell to string, replacing NaN with empty string
+        df[new_name] = df[columns].apply(
+            lambda row: separator.join(str(v) if pd.notna(v) else '' for v in row),
+            axis=1
+        )
+
+        session['df'] = df_to_session_dict(df)
+        session['original_columns'] = list(df.columns)
+        session['change_log'].append(f"Merged columns [{', '.join(columns)}] → '{new_name}'")
+        session.modified = True
+
+        return jsonify({'success': True, 'message': f'Columns merged into "{new_name}"'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Merge failed: {str(e)}'})
+
+@app.route('/split_column', methods=['POST'])
+def split_column():
+    try:
+        data = request.get_json()
+        column = data.get('column')
+        delimiter = data.get('delimiter', ',')
+
+        if not column:
+            return jsonify({'success': False, 'message': 'No column selected'})
+
+        if not delimiter:
+            return jsonify({'success': False, 'message': 'Delimiter cannot be empty'})
+
+        df = pd.DataFrame(session['df'])
+        if column not in df.columns:
+            return jsonify({'success': False, 'message': f'Column "{column}" not found'})
+
+        save_to_history(f"Split column: {column}")
+
+        # Fill NaN with empty string before splitting to avoid "nan" appearing in results
+        split_df = df[column].fillna('').astype(str).str.split(delimiter, expand=True)
+        split_df.columns = [f"{column}_part{i + 1}" for i in range(split_df.shape[1])]
+
+        # Insert new columns right after the original column
+        col_idx = df.columns.get_loc(column)
+        for i, new_col in enumerate(split_df.columns):
+            df.insert(col_idx + 1 + i, new_col, split_df[new_col].str.strip())
+
+        session['df'] = df_to_session_dict(df)
+        session['original_columns'] = list(df.columns)
+        session['change_log'].append(f"Split column '{column}' by '{delimiter}' → {split_df.shape[1]} parts")
+        session.modified = True
+
+        return jsonify({'success': True, 'message': f'Column "{column}" split into {split_df.shape[1]} part(s)'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Error splitting column: {str(e)}'})
 
 @app.route('/toggle_dark_mode', methods=['POST'])
 def toggle_dark_mode():

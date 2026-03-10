@@ -105,8 +105,19 @@ async function deleteRowsRange() {
 
 // Delete rows (specific)
 async function deleteRowsSpecific() {
-    const indicesStr = document.getElementById('specificIndices').value;
+    const indicesStr = document.getElementById('specificIndices').value.trim();
+
+    if (!indicesStr) {
+        showToast('Please enter row indices to delete (e.g. 0, 2, 4)', 'error');
+        return;
+    }
+
     const indices = indicesStr.split(',').map(i => parseInt(i.trim())).filter(i => !isNaN(i));
+
+    if (indices.length === 0) {
+        showToast('No valid row indices found. Use numbers separated by commas.', 'error');
+        return;
+    }
 
     try {
         const response = await fetch('/delete_rows', {
@@ -134,11 +145,19 @@ async function applyRenaming() {
 
     renameInputs.forEach(input => {
         const original = input.dataset.original;
-        const newName = input.value;
-        if (original !== newName) {
+        const newName = input.value.trim();
+        if (original !== newName && newName !== '') {
             new_names[original] = newName;
         }
     });
+
+    // Check for duplicate target names
+    const targetNames = Object.values(new_names);
+    const uniqueTargets = new Set(targetNames);
+    if (targetNames.length !== uniqueTargets.size) {
+        showToast('Two or more columns cannot be renamed to the same name', 'error');
+        return;
+    }
 
     const rowOption = document.querySelector('input[name="rowRenameOption"]:checked').value;
     const rowPrefix = document.getElementById('rowPrefix')?.value || '';
@@ -439,9 +458,148 @@ function togglePasswordVisibility(fieldId) {
     }
 }
 
+// Sort data by column
+async function sortData() {
+    const column = document.getElementById('sortColumn').value;
+    const order = document.querySelector('input[name="sortOrder"]:checked').value;
+
+    if (!column) {
+        showToast('Please select a column to sort by', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/sort_data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ column, order })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(data.message, 'success');
+            location.reload();
+        } else {
+            showToast(data.message, 'error');
+        }
+    } catch (error) {
+        showToast('Error sorting data', 'error');
+    }
+}
+
+// Merge multiple columns into one
+async function mergeColumns() {
+    const select = document.getElementById('mergeColumns');
+    const columns = Array.from(select.selectedOptions).map(opt => opt.value);
+    const separator = document.getElementById('mergeSeparator').value || '_';
+    const new_name = document.getElementById('mergeNewName').value;
+
+    if (columns.length < 2) {
+        showToast('Please select at least 2 columns to merge', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/merge_columns', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ columns, separator, new_name })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(data.message, 'success');
+            location.reload();
+        } else {
+            showToast(data.message, 'error');
+        }
+    } catch (error) {
+        showToast('Error merging columns', 'error');
+    }
+}
+
+// Split a column into multiple
+async function splitColumn() {
+    const column = document.getElementById('splitColumn').value;
+    const delimiter = document.getElementById('splitDelimiter').value || ',';
+
+    if (!column) {
+        showToast('Please select a column to split', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/split_column', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ column, delimiter })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(data.message, 'success');
+            location.reload();
+        } else {
+            showToast(data.message, 'error');
+        }
+    } catch (error) {
+        showToast('Error splitting column', 'error');
+    }
+}
+
+// Toggle format options (show/hide password when CSV selected)
+function toggleFormatOptions() {
+    const format = document.querySelector('input[name="exportFormat"]:checked').value;
+    const passwordSection = document.getElementById('passwordProtect');
+    const passwordFields = document.getElementById('passwordFields');
+    const csvNote = document.getElementById('csvNote');
+
+    if (format === 'csv') {
+        if (passwordSection) {
+            passwordSection.checked = false;
+            passwordSection.disabled = true;
+        }
+        if (passwordFields) passwordFields.style.display = 'none';
+        if (csvNote) csvNote.style.display = 'block';
+        passwordApplied = false;
+        appliedPassword = '';
+    } else {
+        if (passwordSection) passwordSection.disabled = false;
+        if (csvNote) csvNote.style.display = 'none';
+    }
+}
+
+// Change active sheet
+async function changeSheet(sheetName) {
+    const sheetMessage = document.getElementById('sheetMessage') || document.querySelector('.dataset-modal-header');
+
+    // Show loading indicator
+    showToast(`Switching to sheet: ${sheetName}...`, 'info');
+
+    try {
+        const response = await fetch('/change_sheet', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sheet_name: sheetName })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(`✅ ${data.message}`, 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast(`❌ ${data.message}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error switching sheet:', error);
+        showToast('❌ Error switching sheet', 'error');
+    }
+}
+
 // Download file
 async function downloadFile() {
-    const passwordProtect = document.getElementById('passwordProtect').checked;
+    const format = document.querySelector('input[name="exportFormat"]:checked')?.value || 'xlsx';
+    const passwordProtect = document.getElementById('passwordProtect')?.checked && format === 'xlsx';
 
     if (passwordProtect) {
         if (!passwordApplied) {
@@ -450,10 +608,10 @@ async function downloadFile() {
         }
 
         // Download with password protection using the applied password
-        window.location.href = `/download?password_protect=true&password=${encodeURIComponent(appliedPassword)}`;
+        window.location.href = `/download?format=xlsx&password_protect=true&password=${encodeURIComponent(appliedPassword)}`;
     } else {
         // Download without password
-        window.location.href = '/download';
+        window.location.href = `/download?format=${format}`;
     }
 }
 

@@ -2,7 +2,7 @@
 REM Simple launcher for the Data Cleaning App
 REM This file ensures we're in the right directory
 
-cd /d "C:\Users\DELL\Desktop\data analyst"
+cd /d "%~dp0"
 
 echo ========================================
 echo   AI Data Cleaning Tool
@@ -12,7 +12,7 @@ echo Starting application...
 echo.
 
 REM Use Python to run the Flask app
-python flask_app.py
+"C:\Users\saija\anaconda3\python.exe" flask_app.py
 
 pause
 
